@@ -1,5 +1,6 @@
 # 따라하면서 배우는 유니티5 셰이더와 이펙트 입문
-따라하면서 배우는 유니티5 셰이더와 이펙트 입문 책을 읽으며 메모한 것들
+* 따라하면서 배우는 유니티5 셰이더와 이펙트 입문 책을 읽으며 메모한 것들
+* 각 챕터 별로 실습은 *Chapter1_Start*와 같이_Start가 붙은 scene
 ## 01 표준 셰이더의 이해
 * 금속 맵에서 금속성(metallicity 또는 metalness)값은 RBGA 텍스처 파일의 빨강 채널에 정의된다. 금속에 가까운 표면일수록 빨강 값이 높고 초록이나 파랑과 같은 다른 채널은 무시된다. 평활도(smoothness)는 금속 텍스처의 알파 채널에 정의되며, 정의된 값이 없으면 최대 평활도가 머터리얼에 할당된다.
 * <span style="background-color:yellow; color:black;">노멀 맵(Normal Map)</span>은 모델에서 빛을 반사하는 방향을 정의하는 면법서(surface normal)을 재정의한다. 이 기법은 모델 표면에 가짜 고해상도 디테을을 묘사하는 데 자주 사용된다. Normal Map 슬롯은 RGB 맵을 사용하며, 각 채널이 법선 표면의 방향을 정의한다.
@@ -70,6 +71,7 @@ Shader "PACKT/Moon" {
 	}
 }
 ```
+
 #### 셰이더 작동 확인
 * Material을 생성 > Shader 유형 > 위에서 정의한 PACKT > Moon으로 설정하면 됨.
 * 설정 후 머터리얼을 보면 Color라는 프로퍼티가 하나 존재한다.
@@ -110,7 +112,7 @@ Shader "PACKT/Moon" {
         /*
         컴파일 지시자이다.
         이러한 코드는 항상 여는 Cg 태그 다음에 오며, 셰이더가 실행될 때 컴파일될 셰이더 함수와 조명 모델을 지정한다. 
-        아래 코드에선 음영을 지원하는 **램버트(Lambert)**모델을 사용한다.
+        아래 코드에선 음영을 지원하는 램버트(Lambert)모델을 사용한다.
         */
 		#pragma surface surf Lambert
 		
@@ -143,5 +145,95 @@ Shader "PACKT/Moon" {
 	}
 }
 ```
+### 주인공 헬멧의 반투명 효과 개선
+#### 커스텀 투명 셰이더 만들기
+* Project > Create > Shader > Standard Surface Shader 이름은 Glass로 생성 후 Material을 생성 > Shader 유형 > Custom > Glass선택 후 적용
+* Glass.shader
+    * subshader 블록에서는 다양한 셰이더 특성을 정의하며, 투명도를 지정하는 알파 채널이나 다른 프로퍼티를 지정할 수 있다.
+    ```c#
+    SubShader
+    {
+        Tags { "RenderType"="Transparent" }
+    }
+    ```
+    * Cg 블록에서 셰이터 컴파일 지시자 뒤에 alpha 추가
+    ```c#
+    #pragma surface surf Standard fullforwardshadows alpha
+    ```
+* Inspector 뷰에서 수정
+    * color 알파 채널 : 128
+    * Smoothness : 0.9 => 헬멧 표면이 빛을 반사함.
+    * Metallic : 0.188 => 반투명하며 약간 반짝이게 됨.
+* 결과
+    <div><img src="./readmeimg/a1.png" width="300"/></div>
+#### 헬멧의 내표면 만들기
+* 위 설정까지만 하면 헬멧 외표면만 반짝인다.
+* **유니티 셰이더는 성능상의 이유로 기본적으로 메시의 외면만 렌더링하면 내면<sup>back face</sup>은 자동으로 제거된다.**
+* 위의 기본 동작을 변경하는 코드 
+    * LOD 행 뒤에 Cull Off 추가
+    ```c#
+    SubShader
+    {
+        Tags { "RenderType"="Transparent" }
+        LOD 200
+        Cull Off
+    }
+    ```
+* 결과
+    <div><img src="./readmeimg/a2.png" width="300"/></div>
+    
+    * 헬멧 안쪽이 렌더링되지만 외면과 같은 위치에 렌더링되면서 약간의 아티팩트가 생성됨.
+        ```
+        "아티팩트(artifact)"는 일반적으로 컴퓨터 그래픽스나 렌더링에서 사용되는 용어로, 의도하지 않은 현상이나 불규칙한 모습을 가리킨다.
+        
+        특히, 픽셀이나 다각형 등의 그래픽 요소에서 생기는 예기치 않은 현상을 의미할 수 있다. 따라서 헬멧 안쪽이나 외면과 같은 위치에서 렌더링되는 동안 발생하는 약간의 아티팩트는 렌더링 과정에서 발생하는 잡음, 광선 추적 오류, 또는 렌더링 엔진의 한계로 인한 비정상적인 그래픽 현상을 말함.
+        ``` 
+    * 헬멧의 외면과 내면을 별도로 렌더링하도록 셰이더를 수정하면 이 결과를 개선할 수 있다.
+##### 외면과 내면 분리
+* 셰이더에서 헬멧의 두께를 가짜로 표현하게 만들면 씬에서 헬멧을 더 현실적으로 보이게 할 수 있다.
+* Glass.shader 수정
+    1. Propertices 블록에 코드 추가
+        ```c#
+        _Thickness ("Thickness", Range(-1,1)) = 0.5
+        ```
+    2. 위에서 추가한 Cull Off => Cull Back으로 수정
 
+    3. 아래 코드를 기존 코드의 ENDCG 다음에 추가한다. 
+        * 이 코드는 첫 번째 셰이더와 사용할 추가 셰이더로서 **내면의 모양을 정의하는 역할**을 한다. 
+        * 또한, 두 셰이더가 서로 겹치지 않도록 전면을 제거한다.
+        ```c#
+                Cull Front
+                
+                CGPROGRAM
+                /*셰이더가 적용되는 버텍스에 접근할 수 있게 vertex:vert 추가*/
+                #pragma surface surf Standard fullforwardshadows alpah vertex:vert
 
+                struct Input {
+                    float2 uv_MainTex;
+                };
+
+                float _Thickness;
+                /*버텍스의 위치 조정*/
+                void vert (inout appdata_full v) {
+                    v.vertex.xyz += v.normal * _Thickness;
+                }
+
+                sampler2D _MainTex;
+                half _Glossiness;
+                half _Metallic;
+                fixed4 _Color;
+
+                void surf (Input IN, inout SurfaceOutputStandard o) {
+                    fixed4 c = tex2D (_MainTex, IN.uv_MainTex) * _Color;
+                    o.Albedo = c.rgb;
+                    o.Metallic = _Metallic;
+                    o.Smoothness = _Glossiness;
+                    o.Alpha = c.a;
+                }
+                ENDCG
+        ```
+        4. Inspector 뷰에서 Thickness -0.2로 설정
+* 결과적으로 Inspector뷰에서 _Thickness에 지정하는 값만큼 유리 표면이 두께를 가진 것처럼 표현됨.
+    <div><img src="./readmeimg/a3.png" width="300"/></div>
+* **이 기법은 헬멧이나 차광판, 안경 등과 같이 얇은 유리를 나타내는 데 적합하지만, 두꺼운 유리나 밀도가 높은 투명한 머터리얼을 표현하는 데 필요한 굴절을 시뮬레이션하지는 못한다.**
+### 행선의 대기 개선
