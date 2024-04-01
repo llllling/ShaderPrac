@@ -237,3 +237,78 @@ Shader "PACKT/Moon" {
     <div><img src="./readmeimg/a3.png" width="300"/></div>
 * **이 기법은 헬멧이나 차광판, 안경 등과 같이 얇은 유리를 나타내는 데 적합하지만, 두꺼운 유리나 밀도가 높은 투명한 머터리얼을 표현하는 데 필요한 굴절을 시뮬레이션하지는 못한다.**
 ### 행선의 대기 개선
+* 행성 대기의 가스 층은 고형의 물체가 빛을 반사하는 것과는 달리 주변부에서 연무처럼 보이는 현상을 일으킨다. 이를 커스텀 셰이더로 비슷한 효과를 표현한다.
+#### 커스텀 행성 셰이더 만들기
+* Project > Create > Shader > Standard Surface Shader 이름 Planet 설정
+    ```c#
+    Shader "PACKT/Planet_falloff"
+    ```
+* 머터리얼 Planet_falloff생성 > 셰이더 유형 Planet_falloff 설정
+* 씬 뷰의 ridleyVI에 해당 머터리얼 드래그해서 적용
+##### 행성 셰이더 편집
+* Propertics에 _Thickness,_AtmosColor 추가
+```c#
+    Properties
+    {
+        _Color ("Color", Color) = (1,1,1,1)
+        _MainTex ("Albedo (RGB)", 2D) = "white" {}
+        _Thickness("Thickness", Range(-1, 1)) = 0.5
+        _AtmosColor (" Atmosphere Color", Color) = (1,1,1,1)
+    }
+    SubShader
+    {
+        Tags { "RenderType"="Opaque" }
+        LOD 200
+
+        CGPROGRAM
+        #pragma surface surf Standard fullforwardshadows
+
+        #pragma target 3.0
+
+        sampler2D _MainTex;
+
+        struct Input
+        {
+            float2 uv_MainTex;
+        };
+
+        fixed4 _Color;
+
+        UNITY_INSTANCING_BUFFER_START(Props)
+        UNITY_INSTANCING_BUFFER_END(Props)
+
+        void surf (Input IN, inout SurfaceOutputStandard o)
+        {
+            fixed4 c = tex2D (_MainTex, IN.uv_MainTex) * _Color;
+            o.Albedo = c.rgb;
+            o.Alpha = c.a;
+        }
+        ENDCG
+```
+##### 대기 셰이더 패스 추가 
+* 행성 셰이더 코드 아래쪽에 새로운 패스 코드 추가
+* 버텍스 함수를 이용해 지오메트리를 돌출시킨다.
+* 대기를 나타내는 데 사용할 보조 색상을 정의하고 이 색상의 알파 채널을 이용해 대기의 불투명도를 설정한다.
+```c#
+        Cull Front
+
+        CGPROGRAM
+        #pragma surface surf Standard fullforwardshadows alpha vertex:vert
+        struct Input {
+            float2 uv_MainTex;
+        };
+
+        float _Thickness;
+        void vert (inout appdata_full v) {
+            v.vertex.xyz += v.normal * _Thickness;
+        }
+
+        fixed4 _AtmosColor;
+        void surf (Input IN, inout SurfaceOutputStandard o) {
+            o.Albedo = _AtmosColor.rgb;
+            o.Alpha =_AtmosColor.a;
+        }
+        ENDCG
+```
+* 결과
+<div><img src="./readmeimg/a4.png" width="300"></div>
